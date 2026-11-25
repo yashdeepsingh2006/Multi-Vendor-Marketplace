@@ -1,16 +1,63 @@
-# Infrastructure
+# Infrastructure & Deployment
 
-This directory is reserved for shared deployment configuration.
+This directory documents the deployment and container configuration for the decoupled multi-vendor marketplace.
 
-The current OTP service still has its service-local
-`services\otp-service\docker-compose.yml`, which starts the OTP API and Redis.
-The vendor service and frontend do not yet have container definitions, so a
-root Compose file is intentionally not added during this reorganization.
+## Unified Backend Docker Compose
 
-Future infrastructure work can add:
+The entire backend ecosystem (MongoDB, Redis, OTP Service, Vendor Service, Customer Service, Order Service, and API Gateway) is containerized and managed by `docker-compose.yml`.
 
-- a root Compose file for all current applications
-- MongoDB and Redis development dependencies
-- Nginx or an API gateway
-- service-specific Dockerfiles
-- deployment environment templates
+The frontend (`frontend/marketplace-ui`) runs outside of Docker directly on the host machine to allow instant Hot Module Replacement (HMR) and fast local debugging.
+
+### Start the Backend Stack (Docker)
+
+```powershell
+docker compose up -d --build
+```
+
+### Start the Frontend (Host)
+
+```powershell
+cd frontend\marketplace-ui
+npm install
+npm run dev
+```
+
+### Container Services Layout
+
+| Service | Container Name | Internal Port | Host Port | Internal Network Alias | Dependencies |
+|---|---|:---:|:---:|---|---|
+| **MongoDB** | `marketplace-mongodb` | 27017 | 27017 | `mongodb`, `mongo` | None |
+| **Redis** | `marketplace-redis` | 6379 | 6379 | `redis`, `cache` | None |
+| **OTP Service** | `marketplace-otp-service` | 3000 | 3000 | `otp-service` | `redis` (healthy) |
+| **Vendor Service** | `marketplace-vendor-service` | 3001 | 3001 | `vendor-service` | `mongodb` (healthy), `otp-service` |
+| **Customer Service** | `marketplace-customer-service` | 3002 | 3002 | `customer-service` | `mongodb` (healthy), `otp-service` |
+| **Order Service** | `marketplace-order-service` | 3003 | 3003 | `order-service` | `mongodb` (healthy) |
+| **API Gateway** | `marketplace-api-gateway` | 8000 | 8000 | `api-gateway` | Downstream services |
+
+### Volumes & Persistence
+
+- `mongo_data`: Stores MongoDB database data (`/data/db`).
+- `redis_data`: Stores Redis cache data (`/data`).
+- `vendor_uploads`: Persists uploaded KYC documents and product images (`/app/uploads`).
+
+### Management Commands
+
+```powershell
+# Build and start all services in the background
+docker compose up -d --build
+
+# View real-time logs for all services
+docker compose logs -f
+
+# View logs for a specific service (e.g. gateway)
+docker compose logs -f api-gateway
+
+# Check status of running containers
+docker compose ps
+
+# Stop all services
+docker compose down
+
+# Stop all services and wipe volumes (clean start)
+docker compose down -v
+```

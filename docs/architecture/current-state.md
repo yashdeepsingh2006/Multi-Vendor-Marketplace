@@ -5,9 +5,19 @@
 ### Frontend
 
 `frontend/marketplace-ui` is a React, TypeScript, and Vite application running on port 5173.
-- It calls **Order Service** (`http://localhost:3003`) for all order creation, cancellation, status queries, and vendor order fulfillment.
-- It calls **Vendor Service** (`http://localhost:3001`) for vendor onboarding, KYC, vendor product management, and admin reviews.
-- It calls **Customer Service** (`http://localhost:3002`) for customer OTP authentication, profiles, saved addresses, catalog discovery, and cart management.
+- All client requests can route through the unified **API Gateway** (`http://localhost:8000`), with transparent fallback to individual microservice ports if needed.
+- It interacts with **Order Service** (`:3003` or `/orders`, `/vendor/orders`) for checkout, order lifecycle, and fulfillment.
+- It interacts with **Customer Service** (`:3002` or `/auth/customer`, `/customers`, `/catalog`, `/cart`) for customer profiles, catalog, and carts.
+- It interacts with **Vendor Service** (`:3001` or `/auth`, `/register`, `/vendor-data`, `/products`, `/admin`) for onboarding, KYC, and product catalog management.
+
+### API Gateway
+
+`services/api-gateway` is an Express reverse proxy running on port 8000.
+It acts as the single entry point for all frontend and external API traffic:
+- Bundles downstream microservices behind unified `/api/*` and resource paths.
+- Provides streaming request forwarding for file uploads (KYC docs, product images).
+- Performs aggregated health checks (`/health`) across all 4 downstream services.
+- Manages CORS and injects `x-request-id` tracking headers.
 
 ### Order service
 
@@ -61,17 +71,20 @@ It calls the OTP service over HTTP (`:3000`) for vendor OTP verification.
 
 ```text
                                frontend (:5173)
-                   ┌──────────────────┼──────────────────┐
-                   │ HTTP             │ HTTP             │ HTTP
-                   ▼                  ▼                  ▼
-         vendor-service (:3001) customer-service (:3002) order-service (:3003)
-            │             │          │             │          │
-            │ MongoDB     │ HTTP     │ MongoDB     │ HTTP     │ MongoDB
-            │             ▼          │             ▼          │
-            │       otp-service (:3000)      otp-service (:3000)
-            │             │                        │
-            │             ├── Redis                ├── Redis
-            │             └── SMTP                 └── SMTP
-            ▼                                      ▼          ▼
-         Shared MongoDB (Users, Vendors, Products, Carts, SavedAddresses, Orders)
+                                      │
+                                      ▼
+                             API Gateway (:8000)
+                    ┌─────────────────┼─────────────────┐
+                    │ HTTP            │ HTTP            │ HTTP
+                    ▼                 ▼                 ▼
+          vendor-service (:3001) customer-service (:3002) order-service (:3003)
+             │             │         │             │         │
+             │ MongoDB     │ HTTP    │ MongoDB     │ HTTP    │ MongoDB
+             │             ▼         │             ▼         │
+             │       otp-service (:3000)     otp-service (:3000)
+             │             │                       │
+             │             ├── Redis               ├── Redis
+             │             └── SMTP                └── SMTP
+             ▼                                     ▼         ▼
+          Shared MongoDB (Users, Vendors, Products, Carts, SavedAddresses, Orders)
 ```

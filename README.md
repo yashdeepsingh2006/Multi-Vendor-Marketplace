@@ -8,8 +8,9 @@ The microservices are kept independently runnable and scalable.
 ```text
 Multi-Vendor-Marketplace/
 ├── frontend/
-│   └── marketplace-ui/      # React + TypeScript + Vite frontend
+│   └── marketplace-ui/      # React + TypeScript + Vite frontend (:5173)
 ├── services/
+│   ├── api-gateway/         # Unified reverse proxy & routing hub (:8000)
 │   ├── order-service/       # Order processing, multi-vendor cart checkout, inventory reservation, and vendor fulfillment (:3003)
 │   ├── customer-service/    # Customer profiles, addresses, public catalog, and cart (:3002)
 │   ├── vendor-service/      # Vendor identity, profiles, KYC, products, and admin approval (:3001)
@@ -19,7 +20,30 @@ Multi-Vendor-Marketplace/
 └── .github/                 # Reserved for future GitHub workflows
 ```
 
-## Local development
+## Running the Backend Stack with Docker
+
+All backend services (MongoDB, Redis, OTP Service, Vendor Service, Customer Service, Order Service, and API Gateway) can be started together with a single command:
+
+```powershell
+docker compose up -d --build
+```
+
+Then start the frontend on your host machine for instant Hot Module Replacement (HMR):
+
+```powershell
+cd frontend\marketplace-ui
+npm run dev
+```
+
+To stop all running backend containers:
+
+```powershell
+docker compose down
+```
+
+For container logs and persistence details, see [Infrastructure & Deployment](infrastructure/README.md).
+
+## Local development (All Services Without Docker)
 
 Start the backend services from their own directories:
 
@@ -47,6 +71,12 @@ cd services\order-service
 npm run dev
 ```
 
+```powershell
+# 5. API Gateway (Port 8000)
+cd services\api-gateway
+npm run dev
+```
+
 Then start the frontend:
 
 ```powershell
@@ -62,6 +92,7 @@ The default local ports are:
 | Vendor service | 3001 |
 | Customer service | 3002 |
 | Order service | 3003 |
+| API Gateway | 8000 |
 | Vite frontend | 5173 |
 
 MongoDB and Redis must be available locally. Environment files remain inside

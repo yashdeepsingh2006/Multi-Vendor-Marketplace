@@ -48,7 +48,7 @@ const resolveBaseUrl = (): string => {
   try {
     const metaEnv = (import.meta as unknown as { env?: Record<string, string> }).env;
     if (metaEnv) {
-      url = metaEnv.VITE_VENDOR_SERVICE_URL || metaEnv.VENDOR_SERVICE_URL;
+      url = metaEnv.VITE_API_GATEWAY_URL || metaEnv.VITE_VENDOR_SERVICE_URL || metaEnv.VENDOR_SERVICE_URL;
     }
   } catch {
     // Environments without import.meta.env
@@ -56,7 +56,7 @@ const resolveBaseUrl = (): string => {
   if (!url) {
     const globalProcess = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
     if (globalProcess?.env) {
-      url = globalProcess.env.VITE_VENDOR_SERVICE_URL || globalProcess.env.VENDOR_SERVICE_URL;
+      url = globalProcess.env.VITE_API_GATEWAY_URL || globalProcess.env.VITE_VENDOR_SERVICE_URL || globalProcess.env.VENDOR_SERVICE_URL;
     }
   }
   return (url || 'http://localhost:3001').replace(/\/+$/, '');
@@ -67,7 +67,7 @@ const resolveOrderServiceUrl = (): string => {
   try {
     const metaEnv = (import.meta as unknown as { env?: Record<string, string> }).env;
     if (metaEnv) {
-      url = metaEnv.VITE_ORDER_SERVICE_URL || metaEnv.ORDER_SERVICE_URL;
+      url = metaEnv.VITE_API_GATEWAY_URL || metaEnv.VITE_ORDER_SERVICE_URL || metaEnv.ORDER_SERVICE_URL;
     }
   } catch {
     // Environments without import.meta.env
@@ -75,7 +75,7 @@ const resolveOrderServiceUrl = (): string => {
   if (!url) {
     const globalProcess = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
     if (globalProcess?.env) {
-      url = globalProcess.env.VITE_ORDER_SERVICE_URL || globalProcess.env.ORDER_SERVICE_URL;
+      url = globalProcess.env.VITE_API_GATEWAY_URL || globalProcess.env.VITE_ORDER_SERVICE_URL || globalProcess.env.ORDER_SERVICE_URL;
     }
   }
   return (url || 'http://localhost:3003').replace(/\/+$/, '');

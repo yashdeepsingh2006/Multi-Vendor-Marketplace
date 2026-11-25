@@ -1,0 +1,184 @@
+services:
+  # ============================================================================
+  # Shared Storage & Cache
+  # ============================================================================
+  mongodb:
+    image: mongo:7.0
+    container_name: marketplace-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: marketplace
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      marketplace-network:
+        aliases:
+          - mongodb
+          - mongo
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: marketplace-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      marketplace-network:
+        aliases:
+          - redis
+          - cache
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ============================================================================
+  # Microservices
+  # ============================================================================
+  otp-service:
+    build:
+      context: ./services/otp-service
+      dockerfile: Dockerfile
+    container_name: marketplace-otp-service
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      ENVIRONMENT: production
+      REDIS_URL: redis://redis:6379
+      RESEND_COOLDOWN: 60000
+      EXPIRE_TIME: 300000
+      RESEND_LIMIT: 2
+      ATTEMPT_LIMIT: 3
+      OTP_EXPIRY_TIME: 5
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      CORS_ORIGIN: "*"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+
+  vendor-service:
+    build:
+      context: ./services/vendor-service
+      dockerfile: Dockerfile
+    container_name: marketplace-vendor-service
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      MONGO_URI: mongodb://mongodb:27017/marketplace
+      OTP_SERVICE_URL: http://otp-service:3000
+      JWT_SECRET: ${JWT_SECRET:-super_secret_vendor_service_jwt_key_2026}
+      JWT_EXPIRES_IN: 7d
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-yashdeepsingh110200@gmail.com}
+      CORS_ORIGIN: "*"
+    volumes:
+      - vendor_uploads:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      otp-service:
+        condition: service_started
+    networks:
+      - marketplace-network
+
+  customer-service:
+    build:
+      context: ./services/customer-service
+      dockerfile: Dockerfile
+    container_name: marketplace-customer-service
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      MONGO_URI: mongodb://mongodb:27017/marketplace
+      OTP_SERVICE_URL: http://otp-service:3000
+      JWT_SECRET: ${JWT_SECRET:-super_secret_vendor_service_jwt_key_2026}
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: "*"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      otp-service:
+        condition: service_started
+    networks:
+      - marketplace-network
+
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    container_name: marketplace-order-service
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      MONGO_URI: mongodb://mongodb:27017/marketplace
+      JWT_SECRET: ${JWT_SECRET:-super_secret_vendor_service_jwt_key_2026}
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: "*"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+
+  # ============================================================================
+  # API Gateway (Port 8000)
+  # ============================================================================
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: marketplace-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      CORS_ORIGIN: "*"
+      OTP_SERVICE_URL: http://otp-service:3000
+      VENDOR_SERVICE_URL: http://vendor-service:3001
+      CUSTOMER_SERVICE_URL: http://customer-service:3002
+      ORDER_SERVICE_URL: http://order-service:3003
+    depends_on:
+      - otp-service
+      - vendor-service
+      - customer-service
+      - order-service
+    networks:
+      - marketplace-network
+
+# ============================================================================
+# Persistent Storage & Networks
+# ============================================================================
+volumes:
+  mongo_data:
+  redis_data:
+  vendor_uploads:
+
+networks:
+  marketplace-network:
+    driver: bridge
+

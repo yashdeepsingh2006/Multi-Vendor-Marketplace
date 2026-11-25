@@ -15,7 +15,7 @@ const resolveBaseUrl = (): string => {
   let url: string | undefined;
   try {
     if (typeof import.meta !== 'undefined' && import.meta && import.meta.env) {
-      url = import.meta.env.VITE_CUSTOMER_SERVICE_URL || import.meta.env.CUSTOMER_SERVICE_URL || import.meta.env.VITE_VENDOR_SERVICE_URL || import.meta.env.VENDOR_SERVICE_URL;
+      url = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_CUSTOMER_SERVICE_URL || import.meta.env.CUSTOMER_SERVICE_URL || import.meta.env.VITE_VENDOR_SERVICE_URL || import.meta.env.VENDOR_SERVICE_URL;
     }
   } catch {
     // In environments where import.meta.env is not supported
@@ -23,7 +23,7 @@ const resolveBaseUrl = (): string => {
   if (!url) {
     const globalProcess = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
     if (globalProcess?.env) {
-      url = globalProcess.env.VITE_CUSTOMER_SERVICE_URL || globalProcess.env.CUSTOMER_SERVICE_URL || globalProcess.env.VITE_VENDOR_SERVICE_URL || globalProcess.env.VENDOR_SERVICE_URL;
+      url = globalProcess.env.VITE_API_GATEWAY_URL || globalProcess.env.VITE_CUSTOMER_SERVICE_URL || globalProcess.env.CUSTOMER_SERVICE_URL || globalProcess.env.VITE_VENDOR_SERVICE_URL || globalProcess.env.VENDOR_SERVICE_URL;
     }
   }
   return (url || 'http://localhost:3002').replace(/\/+$/, '');
@@ -33,7 +33,7 @@ const resolveOrderServiceUrl = (): string => {
   let url: string | undefined;
   try {
     if (typeof import.meta !== 'undefined' && import.meta && import.meta.env) {
-      url = import.meta.env.VITE_ORDER_SERVICE_URL || import.meta.env.ORDER_SERVICE_URL;
+      url = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_ORDER_SERVICE_URL || import.meta.env.ORDER_SERVICE_URL;
     }
   } catch {
     // In environments where import.meta.env is not supported
@@ -41,7 +41,7 @@ const resolveOrderServiceUrl = (): string => {
   if (!url) {
     const globalProcess = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
     if (globalProcess?.env) {
-      url = globalProcess.env.VITE_ORDER_SERVICE_URL || globalProcess.env.ORDER_SERVICE_URL;
+      url = globalProcess.env.VITE_API_GATEWAY_URL || globalProcess.env.VITE_ORDER_SERVICE_URL || globalProcess.env.ORDER_SERVICE_URL;
     }
   }
   return (url || 'http://localhost:3003').replace(/\/+$/, '');
