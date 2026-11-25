@@ -5,6 +5,7 @@ import cors from "cors";
 dotenv.config();
 
 import routes from "../routes/index.js";
+import paymentRouter from "../routes/payment.routes.js";
 
 const app = express();
 
@@ -21,6 +22,10 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Razorpay webhooks must receive the unparsed request body for signature
+// verification, so mount this router before express.json().
+app.use("/payments", paymentRouter);
 app.use(express.json());
 
 app.get("/health", (req, res) => {

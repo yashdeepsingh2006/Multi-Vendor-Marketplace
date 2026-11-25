@@ -3,7 +3,8 @@ import {
     vendorDataController,
     updateVendorController,
     uploadKycController,
-    getKycDownloadUrlController
+    getKycDownloadUrlController,
+    getKycDocumentController
 } from "../controllers/vendor-data.controller.js";
 import {
     getVendorOrdersController,
@@ -13,6 +14,11 @@ import { authenticate, authorizeRoles, authorizeVendorOwnerOrAdmin } from "../mi
 import { uploadKyc } from "../middlewares/upload.js";
 
 const router = Router();
+
+// Public, short-lived signed link for locally stored KYC documents. It must be
+// registered before the authentication middleware because browsers open the
+// generated URL without an Authorization header.
+router.get("/kyc-file", getKycDocumentController);
 
 // Only vendors or admins can access or mutate vendor store data
 router.use(authenticate, authorizeRoles("vendor", "admin"));

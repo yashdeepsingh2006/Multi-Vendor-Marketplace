@@ -5,13 +5,16 @@ import {
     deleteProduct
 } from "../services/product.service.js";
 import {
+    createLocalReadStream,
     getDownloadUrl,
+    getLocalFile,
     getProductImageUrl,
     getPublicObjectUrl,
-    getS3Config,
+    getStorageConfig,
+    isLocalStorage,
     isProductImageObjectKey,
-    uploadFilesToS3
-} from "../utils/s3.js";
+    uploadFiles
+} from "../utils/storage.js";
 
 const editableProductFields = new Set([
     "title",
@@ -209,7 +212,7 @@ const uploadProductImagesController = async (req, res) => {
             return res.status(400).json({ message: "No image file was uploaded" });
         }
 
-        const uploadedFiles = await uploadFilesToS3(files, {
+        const uploadedFiles = await uploadFiles(files, {
             prefix: `products/${req.user?.userId ?? "unassigned"}`,
             cacheControl: "public, max-age=31536000, immutable"
         });
@@ -236,7 +239,19 @@ const getProductImageController = async (req, res) => {
             return res.status(400).json({ message: "A valid product image key is required" });
         }
 
-        const { publicBaseUrl, signedUrlTtl } = getS3Config();
+        if (isLocalStorage()) {
+            const file = await getLocalFile(key);
+            res.setHeader("Content-Type", file.contentType);
+            res.setHeader("Content-Length", String(file.size));
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+            res.setHeader("X-Content-Type-Options", "nosniff");
+
+            const stream = createLocalReadStream(file.path);
+            stream.on("error", () => res.destroy());
+            return stream.pipe(res);
+        }
+
+        const { publicBaseUrl, signedUrlTtl } = getStorageConfig();
         const redirectUrl = publicBaseUrl
             ? getPublicObjectUrl(key)
             : await getDownloadUrl(key);

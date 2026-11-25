@@ -5,6 +5,11 @@ import {
     cancelCustomerOrder,
     resolveSavedAddress
 } from "../services/order.service.js";
+import {
+    createPaymentSession,
+    processRazorpayWebhook,
+    verifyOrderPayment
+} from "../services/payment.service.js";
 import { validateDeliveryAddress } from "../utils/order.validation.js";
 import { parsePagination } from "../utils/catalog.validation.js";
 
@@ -87,6 +92,61 @@ export const cancelCustomerOrderController = async (req, res) => {
         console.error("Error in cancelCustomerOrderController:", error);
         return res.status(error.statusCode || 500).json({
             message: error.message || "Failed to cancel order"
+        });
+    }
+};
+
+export const createPaymentSessionController = async (req, res) => {
+    try {
+        const result = await createPaymentSession(
+            req.user.userId,
+            req.params.orderId,
+            { email: req.user.email }
+        );
+        return res.status(200).json({
+            message: result.alreadyPaid
+                ? "Order is already paid"
+                : "Payment session created successfully",
+            data: result
+        });
+    } catch (error) {
+        console.error("Error in createPaymentSessionController:", error);
+        return res.status(error.statusCode || 500).json({
+            message: error.message || "Failed to create payment session"
+        });
+    }
+};
+
+export const verifyPaymentController = async (req, res) => {
+    try {
+        const order = await verifyOrderPayment(
+            req.user.userId,
+            req.params.orderId,
+            req.body || {}
+        );
+        return res.status(200).json({
+            message: "Payment verified successfully",
+            data: order
+        });
+    } catch (error) {
+        console.error("Error in verifyPaymentController:", error);
+        return res.status(error.statusCode || 500).json({
+            message: error.message || "Failed to verify payment"
+        });
+    }
+};
+
+export const razorpayWebhookController = async (req, res) => {
+    try {
+        const result = await processRazorpayWebhook(
+            req.body,
+            req.headers["x-razorpay-signature"]
+        );
+        return res.status(200).json({ received: true, ...result });
+    } catch (error) {
+        console.error("Error in razorpayWebhookController:", error);
+        return res.status(error.statusCode || 500).json({
+            message: error.message || "Failed to process Razorpay webhook"
         });
     }
 };

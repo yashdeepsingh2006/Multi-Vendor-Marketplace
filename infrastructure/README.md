@@ -38,11 +38,12 @@ npm run dev
 
 - `mongo_data`: Stores MongoDB database data (`/data/db`).
 - `redis_data`: Stores Redis cache data (`/data`).
+- `vendor_storage`: Stores local product images and KYC documents (`/app/storage`) when Amazon S3 is not configured.
 
-### Object Storage (Amazon S3)
+### Object Storage (Amazon S3 or local disk)
 
 Product images and KYC documents are uploaded to Amazon S3 by the vendor
-service; no uploads are persisted in a Docker volume. Configure the bucket in
+service when the bucket and credentials are provided. Configure the bucket in
 the root `.env` file used by Compose:
 
 ```env
@@ -54,8 +55,16 @@ AWS_S3_BUCKET=
 
 The bucket can remain private. Product images are served through the vendor
 service with short-lived signed redirects, and KYC documents are downloaded
-through authenticated signed URLs. Set `AWS_S3_PUBLIC_BASE_URL` only when a
+through short-lived signed URLs. Set `AWS_S3_PUBLIC_BASE_URL` only when a
 public CDN/custom domain is configured in front of the bucket.
+
+If `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, or `AWS_SECRET_ACCESS_KEY` is empty,
+the vendor service falls back to the `vendor_storage` volume mounted at
+`/app/storage`. Local product images are streamed through `/products/images` and
+KYC files through short-lived HMAC-signed `/vendor-data/kyc-file` links. Set
+`LOCAL_STORAGE_SECRET` explicitly if links must survive container restarts; it
+defaults to the shared `JWT_SECRET`. Local storage is intended for development
+and single-instance deployments; use S3 for production or horizontal scaling.
 
 The IAM principal only needs access to the bucket objects:
 

@@ -2,16 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useCustomer } from '../context/useCustomer';
 import {
   createOrder,
+  createPaymentSession,
+  verifyOrderPayment,
   listAddresses,
   CustomerApiError,
   type CheckoutPayload,
 } from '../services/customerApi';
 import type { DeliveryAddressSnapshot, SavedAddress } from '../types/customer';
+import { loadRazorpayCheckout, openRazorpayCheckout } from '../utils/razorpayCheckout';
+import { setPaymentNotice } from '../utils/paymentNotice';
 import {
   TrashIcon,
   ShieldLockIcon,
   ArrowRightIcon,
-  CheckCircleIcon,
   SpinnerIcon,
   AtelierLogoGlyph,
 } from '../components/ui/Icons';
@@ -192,7 +195,55 @@ export const CartCheckoutView: React.FC<CartCheckoutViewProps> = ({
 
     try {
       const order = await createOrder(payload);
-      await refreshCart();
+
+      try {
+        const session = await createPaymentSession(order.orderId);
+
+        if (!session.alreadyPaid && session.payment) {
+          const scriptReady = await loadRazorpayCheckout();
+
+          if (!scriptReady) {
+            setPaymentNotice(
+              order.orderId,
+              'Secure Razorpay checkout could not be loaded. Your order is saved; use Pay now in the order dossier to try again.'
+            );
+          } else {
+            const paymentResult = await openRazorpayCheckout({
+              key: session.payment.keyId,
+              amount: session.payment.amount,
+              currency: session.payment.currency,
+              name: session.payment.name,
+              description: session.payment.description,
+              order_id: session.payment.razorpayOrderId,
+              prefill: session.payment.prefill,
+              theme: { color: '#9c784e' },
+            });
+
+            if (paymentResult) {
+              await verifyOrderPayment(order.orderId, {
+                razorpayOrderId: paymentResult.razorpay_order_id,
+                razorpayPaymentId: paymentResult.razorpay_payment_id,
+                razorpaySignature: paymentResult.razorpay_signature,
+              });
+            } else {
+              setPaymentNotice(
+                order.orderId,
+                'Payment was cancelled. Your order is saved; use Pay now in the order dossier to complete it.'
+              );
+            }
+          }
+        }
+      } catch (paymentError) {
+        const message = paymentError instanceof Error
+          ? paymentError.message
+          : 'Payment could not be completed.';
+        setPaymentNotice(
+          order.orderId,
+          `${message} Your order is saved; use Pay now in the order dossier to try again.`
+        );
+      }
+
+      await refreshCart().catch(() => undefined);
       onNavigateToOrder(order.orderId);
     } catch (err) {
       if (err instanceof CustomerApiError) {
@@ -599,13 +650,12 @@ export const CartCheckoutView: React.FC<CartCheckoutViewProps> = ({
               {/* Payment Notice */}
               <div className="p-3 bg-[#fafaf8] border border-neutral-200 text-xs text-neutral-600 space-y-1">
                 <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-neutral-900 text-[10px]">
-                  <CheckCircleIcon className="w-3.5 h-3.5 text-neutral-700" />
-                  <span>PAYMENT GATEWAY NOTICE</span>
+                  <ShieldLockIcon className="w-3.5 h-3.5 text-neutral-700" />
+                  <span>SECURE PAYMENT VIA RAZORPAY</span>
                 </div>
                 <p className="text-[11px] leading-relaxed">
-                  Real payment gateway integration is pending in this release. Orders are submitted with status{' '}
-                  <strong className="text-neutral-900">pending</strong> and payment status{' '}
-                  <strong className="text-neutral-900">pending</strong>. No payment card is charged.
+                  After your order is created, Razorpay&apos;s secure checkout opens to collect payment.
+                  Card and UPI details are handled by Razorpay and never touch this marketplace.
                 </p>
               </div>
 
@@ -632,11 +682,11 @@ export const CartCheckoutView: React.FC<CartCheckoutViewProps> = ({
                 {isPlacingOrder ? (
                   <>
                     <SpinnerIcon className="w-4 h-4 animate-spin" />
-                    <span>CHECKING OUT & DECREMENTING STOCK...</span>
+                    <span>CREATING ORDER & OPENING PAYMENT...</span>
                   </>
                 ) : (
                   <>
-                    <span>SUBMIT ORDER (${(cart?.total ?? 0).toFixed(2)} USD)</span>
+                    <span>PROCEED TO PAYMENT (${(cart?.total ?? 0).toFixed(2)} USD)</span>
                     <ArrowRightIcon className="w-3.5 h-3.5" />
                   </>
                 )}

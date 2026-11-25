@@ -803,5 +803,101 @@ test('10. Vendor API Client & Dashboard Integration', async (t) => {
   });
 });
 
+test('11. Razorpay Payment Session and Verification Contract', async (t) => {
+  const {
+    createPaymentSession,
+    verifyOrderPayment,
+    setCustomerToken,
+    removeCustomerToken,
+  } = await import('../src/services/customerApi.ts');
+  const token = createSyntheticJwt({ userId: 42, role: 'customer' });
+  const orderId = 'ORD-12345678-abcd-1234-ef01-123456789abc';
+  setCustomerToken(token);
+
+  await t.test('creates a Razorpay session via POST /orders/:orderId/payment', async () => {
+    let requestedUrl = '';
+    let requestedMethod = '';
+    const originalFetch = globalThis.fetch;
+
+    globalThis.fetch = async (url, init) => {
+      requestedUrl = String(url);
+      requestedMethod = init?.method || '';
+      return new Response(
+        JSON.stringify({
+          message: 'Payment session created',
+          data: {
+            alreadyPaid: false,
+            order: { orderId, status: 'pending', paymentStatus: 'pending' },
+            payment: {
+              provider: 'razorpay',
+              keyId: 'rzp_test_public_key',
+              razorpayOrderId: 'order_TEST123',
+              amount: 12999,
+              currency: 'USD',
+              name: 'Atelier Objects',
+              description: `Order ${orderId}`,
+            },
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    };
+
+    try {
+      const session = await createPaymentSession(orderId);
+      assert.ok(requestedUrl.endsWith(`/orders/${orderId}/payment`));
+      assert.equal(requestedMethod, 'POST');
+      assert.equal(session.payment.keyId, 'rzp_test_public_key');
+      assert.equal(session.payment.razorpayOrderId, 'order_TEST123');
+      assert.equal(session.payment.amount, 12999);
+      assert.equal(session.alreadyPaid, false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      removeCustomerToken();
+    }
+  });
+
+  await t.test('verifies the Razorpay signature via POST /orders/:orderId/payment/verify', async () => {
+    setCustomerToken(token);
+    let requestedUrl = '';
+    let requestedMethod = '';
+    let capturedBody = null;
+    const originalFetch = globalThis.fetch;
+
+    globalThis.fetch = async (url, init) => {
+      requestedUrl = String(url);
+      requestedMethod = init?.method || '';
+      capturedBody = JSON.parse(init?.body || '{}');
+      return new Response(
+        JSON.stringify({
+          message: 'Payment verified successfully',
+          data: { orderId, status: 'processing', paymentStatus: 'paid' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    };
+
+    try {
+      const order = await verifyOrderPayment(orderId, {
+        razorpayOrderId: 'order_TEST123',
+        razorpayPaymentId: 'pay_TEST456',
+        razorpaySignature: 'a'.repeat(64),
+      });
+      assert.ok(requestedUrl.endsWith(`/orders/${orderId}/payment/verify`));
+      assert.equal(requestedMethod, 'POST');
+      assert.deepEqual(capturedBody, {
+        razorpayOrderId: 'order_TEST123',
+        razorpayPaymentId: 'pay_TEST456',
+        razorpaySignature: 'a'.repeat(64),
+      });
+      assert.equal(order.paymentStatus, 'paid');
+      assert.equal(order.status, 'processing');
+    } finally {
+      globalThis.fetch = originalFetch;
+      removeCustomerToken();
+    }
+  });
+});
+
 
 

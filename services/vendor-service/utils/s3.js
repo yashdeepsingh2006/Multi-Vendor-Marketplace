@@ -1,5 +1,3 @@
-import crypto from "crypto";
-import path from "path";
 import {
     S3Client,
     PutObjectCommand,
@@ -7,6 +5,12 @@ import {
     DeleteObjectCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import {
+    buildObjectKey,
+    encodeKey,
+    isKycObjectKey,
+    isProductImageObjectKey
+} from "./storage-keys.js";
 
 // dotenv.config() runs in src/index.js after module imports are evaluated, so
 // configuration is intentionally read lazily on every call instead of at import time.
@@ -91,32 +95,6 @@ const requireBucket = () => {
     return bucket;
 };
 
-const normalizePrefix = (prefix) => {
-    const cleaned = String(prefix || "uploads")
-        .replace(/^\/+|\/+$/g, "")
-        .replace(/[^a-zA-Z0-9/_-]+/g, "_");
-
-    return cleaned || "uploads";
-};
-
-const safeFileName = (originalName) => {
-    const extension = path.extname(originalName || "").toLowerCase().replace(/[^.a-z0-9]/g, "");
-    const base = path
-        .basename(originalName || "file", path.extname(originalName || ""))
-        .replace(/[^a-zA-Z0-9_-]+/g, "_")
-        .replace(/^_+|_+$/g, "")
-        .slice(0, 60) || "file";
-
-    return `${base}${extension}`;
-};
-
-const buildObjectKey = (prefix, originalName) => {
-    const date = new Date().toISOString().slice(0, 10);
-    return `${normalizePrefix(prefix)}/${date}/${crypto.randomUUID()}-${safeFileName(originalName)}`;
-};
-
-const encodeKey = (key) => String(key).split("/").map(encodeURIComponent).join("/");
-
 const getPublicObjectUrl = (key) => {
     const { bucket, region, endpoint, publicBaseUrl, forcePathStyle } = getConfig();
 
@@ -147,34 +125,6 @@ const getProductImageUrl = (key) => {
         return getPublicObjectUrl(key);
     }
     return `/products/images?key=${encodeURIComponent(key)}`;
-};
-
-const assertObjectKey = (key, prefix) => {
-    const value = typeof key === "string" ? key.trim() : "";
-    if (!value || value.length > 1024 || value.includes("..") || !value.startsWith(`${prefix}/`)) {
-        const error = new Error(`Invalid S3 object key. Expected a key starting with "${prefix}/".`);
-        error.statusCode = 400;
-        throw error;
-    }
-    return value;
-};
-
-const isKycObjectKey = (key) => {
-    try {
-        assertObjectKey(key, "kyc");
-        return true;
-    } catch {
-        return false;
-    }
-};
-
-const isProductImageObjectKey = (key) => {
-    try {
-        assertObjectKey(key, "products");
-        return true;
-    } catch {
-        return false;
-    }
 };
 
 const uploadFileToS3 = async (file, options = {}) => {
@@ -233,7 +183,10 @@ const deleteFileFromS3 = async (key) => {
     }
 };
 
-const isS3Configured = () => Boolean(getConfig().bucket);
+const isS3Configured = () => {
+    const { bucket, accessKeyId, secretAccessKey } = getConfig();
+    return Boolean(bucket && accessKeyId && secretAccessKey);
+};
 
 export {
     buildObjectKey,

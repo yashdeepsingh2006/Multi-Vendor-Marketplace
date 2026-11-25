@@ -36,7 +36,8 @@ See [infrastructure/README.md](../../infrastructure/README.md) for volume persis
 - Redis
 - SMTP credentials for sending OTP email
 - An Amazon S3 bucket and IAM credentials with `PutObject`, `GetObject`, and
-  `DeleteObject` permissions
+  `DeleteObject` permissions (optional; without complete AWS credentials the
+  vendor service stores uploads on local disk)
 
 ## Start the OTP service
 
@@ -58,9 +59,11 @@ npm run dev
 
 The vendor service uses `services\vendor-service\.env` (default port `3001`). Its
 `OTP_SERVICE_URL` should point to `http://localhost:3000`. Uploaded product
-images and KYC documents are stored in Amazon S3; set `AWS_REGION`,
-`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_S3_BUCKET` in that file
-(or copy `services\vendor-service\.env.example`).
+images and KYC documents are stored in Amazon S3 when `AWS_REGION`,
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_S3_BUCKET` are all set
+(or copy `services\vendor-service\.env.example`). When the bucket or explicit
+credentials are missing, the service falls back to local disk storage under
+`services\vendor-service\storage` (override with `LOCAL_STORAGE_DIR`).
 
 ## Start the customer service
 
@@ -81,6 +84,11 @@ npm run dev
 ```
 
 The order service uses `services\order-service\.env` (default port `3003`).
+Copy `services\order-service\.env.example` and set `RAZORPAY_KEY_ID` and
+`RAZORPAY_KEY_SECRET` to enable checkout payments. Use test keys
+(`rzp_test_...`) for local development. `RAZORPAY_KEY_SECRET` stays server-side;
+never expose it to the frontend. Webhooks additionally require
+`RAZORPAY_WEBHOOK_SECRET`.
 
 ## Start the API Gateway
 

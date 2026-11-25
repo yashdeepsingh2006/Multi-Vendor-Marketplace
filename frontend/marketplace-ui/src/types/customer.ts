@@ -122,6 +122,41 @@ export interface OrderVendorGroup {
 export type OrderStatus = 'pending' | 'processing' | 'completed' | 'cancelled';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 
+export interface OrderPaymentRecord {
+  provider: string | null;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  paidAmount: number | null;
+  paidAt: string | null;
+}
+
+export interface RazorpayCheckoutSession {
+  provider: 'razorpay';
+  keyId: string;
+  razorpayOrderId: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  prefill?: {
+    name?: string;
+    email?: string;
+    contact?: string;
+  };
+}
+
+export interface PaymentSessionResult {
+  alreadyPaid: boolean;
+  order: CustomerOrder;
+  payment: RazorpayCheckoutSession | null;
+}
+
+export interface PaymentVerificationPayload {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
+
 export interface CustomerOrderSummary {
   orderId: string;
   total: number;
@@ -151,6 +186,7 @@ export interface CustomerOrder {
   currency: string;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  payment?: OrderPaymentRecord | null;
   deliveryAddress: DeliveryAddressSnapshot;
   createdAt: string;
   updatedAt: string;

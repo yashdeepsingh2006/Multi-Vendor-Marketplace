@@ -54,6 +54,19 @@ const orderSchema = new mongoose.Schema({
         default: "pending",
         required: true
     },
+    paymentProvider: { type: String, default: null, trim: true },
+    razorpayOrderId: { type: String, default: null, trim: true, index: true, sparse: true },
+    razorpayPaymentId: { type: String, default: null, trim: true },
+    paidAmountMinor: {
+        type: Number,
+        default: null,
+        validate: {
+            validator: (value) => value === null || Number.isInteger(value),
+            message: "paidAmountMinor must be an integer"
+        }
+    },
+    paidAt: { type: Date, default: null },
+    paymentFailureReason: { type: String, default: null, maxlength: 500 },
     inventoryRestored: { type: Boolean, default: false, required: true },
     deliveryAddress: { type: deliveryAddressSchema, required: true }
 }, {

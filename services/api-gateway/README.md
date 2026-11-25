@@ -24,6 +24,7 @@ Unified API Gateway and reverse-proxy for the Multi-Vendor Marketplace. It bundl
 | `/catalog/*` | `customer-service` (:3002) | Public catalog browsing (filtered by approved vendors) |
 | `/cart/*` | `customer-service` (:3002) | Customer shopping cart persistence |
 | `/orders/*` | `order-service` (:3003) | Customer checkout, order tracking & cancellation |
+| `/payments/*` | `order-service` (:3003) | Razorpay payment webhooks |
 | `/vendor/orders/*` | `order-service` (:3003) | Vendor sub-orders & fulfillment status updates |
 | `/vendor-data/orders/*` | `order-service` (:3003) | Vendor sub-orders & fulfillment status updates |
 | `/auth/*` | `vendor-service` (:3001) | Vendor & Admin login, OTP, and password authentication |

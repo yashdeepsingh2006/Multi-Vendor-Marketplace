@@ -24,6 +24,7 @@ router.get("/", (req, res) => {
             { path: "/catalog/*", target: "Customer Service (:3002)", description: "Public product catalog" },
             { path: "/cart/*", target: "Customer Service (:3002)", description: "Customer shopping cart" },
             { path: "/orders/*", target: "Order Service (:3003)", description: "Customer checkout and order lifecycle" },
+            { path: "/payments/razorpay/webhook", target: "Order Service (:3003)", description: "Razorpay payment webhook" },
             { path: "/vendor/orders/*", target: "Order Service (:3003)", description: "Vendor sub-orders & fulfillment status" },
             { path: "/vendor-data/orders/*", target: "Order Service (:3003)", description: "Vendor sub-orders & fulfillment status" },
             { path: "/auth/*", target: "Vendor Service (:3001)", description: "Vendor & Admin auth and credentials" },
@@ -60,6 +61,7 @@ router.use(["/cart", "/api/cart"], customerProxy);
 // 4. Order Service routes
 router.use(["/orders", "/api/orders"], orderProxy);
 router.use(["/customer/orders", "/api/customer/orders"], orderProxy);
+router.use(["/payments", "/api/payments"], orderProxy);
 
 // 5. Vendor Service routes
 router.use(["/auth", "/api/auth"], vendorProxy);

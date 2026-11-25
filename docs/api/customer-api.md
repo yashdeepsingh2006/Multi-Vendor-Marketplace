@@ -7,7 +7,8 @@ customer frontend.
 
 In development, CORS defaults to open access for local testing. Production
 deployments must set `CORS_ORIGIN` to the frontend origin. KYC documents are
-stored privately in Amazon S3 and are never served as public static content.
+stored privately in Amazon S3 or local disk storage and are never served as
+public static content.
 
 ## Authentication
 
@@ -100,6 +101,11 @@ repeated concurrent conflicts.
 - `GET /orders?page=1&pageSize=20`
 - `GET /orders/:orderId`
 - `POST /orders/:orderId/cancel`
+- `POST /orders/:orderId/payment`
+- `POST /orders/:orderId/payment/verify`
+
+Order and payment endpoints are served by `order-service` (normally
+`http://localhost:3003`, or `/orders` and `/payments` through the API gateway).
 
 Checkout accepts either a validated `deliveryAddress` object or an owned
 `savedAddressId`, never both. The server reloads the cart, products, and
@@ -114,9 +120,21 @@ Orders start with:
 
 Supported order statuses are `pending`, `processing`, `completed`, and
 `cancelled`. Supported payment statuses are `pending`, `paid`, `failed`, and
-`refunded`; this milestone does not implement a payment gateway or mark
-payments as successful. Cancellation is only allowed for a pending unpaid
-order and restores inventory once.
+`refunded`.
+
+After creating an order, the client requests a Razorpay payment session, opens
+Razorpay Checkout with the returned public key ID and gateway order ID, then
+posts the Razorpay payment ID, order ID, and signature to
+`POST /orders/:orderId/payment/verify`. The server verifies the HMAC signature
+with the server-only key secret and marks the order `paid` and `processing`.
+The key secret is never returned to the client.
+
+A verified payment is idempotent. Unpaid orders remain payable from the order
+detail view; paying again reuses the existing Razorpay order. Cancellation is
+only allowed for a pending unpaid order and restores inventory once.
+
+See [the order service contract](order-api.md) for request/response payloads and
+the Razorpay webhook.
 
 Checkout and cancellation require MongoDB transaction support. If the
 deployment does not support transactions, the service returns `503` without
@@ -131,7 +149,8 @@ management endpoints.
 
 ## Current limitations
 
-There are no wishlist, review, commission, payout, or real payment endpoints.
+There are no wishlist, review, commission, or payout endpoints. Payment
+endpoints are documented in [the order service contract](order-api.md).
 MongoDB integration/concurrency behavior requires a dedicated test database
 configured as a replica set; the repository's focused tests do not provide that
 infrastructure.

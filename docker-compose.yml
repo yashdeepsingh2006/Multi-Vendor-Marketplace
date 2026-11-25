@@ -100,6 +100,11 @@ services:
       AWS_S3_SIGNED_URL_TTL: ${AWS_S3_SIGNED_URL_TTL:-900}
       AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-}
       AWS_S3_FORCE_PATH_STYLE: ${AWS_S3_FORCE_PATH_STYLE:-false}
+      LOCAL_STORAGE_DIR: ${LOCAL_STORAGE_DIR:-/app/storage}
+      LOCAL_STORAGE_SECRET: ${LOCAL_STORAGE_SECRET:-}
+      LOCAL_STORAGE_SIGNED_URL_TTL: ${LOCAL_STORAGE_SIGNED_URL_TTL:-900}
+    volumes:
+      - vendor_storage:/app/storage
     depends_on:
       mongodb:
         condition: service_healthy
@@ -145,6 +150,10 @@ services:
       JWT_SECRET: ${JWT_SECRET:-super_secret_vendor_service_jwt_key_2026}
       JWT_EXPIRES_IN: 7d
       CORS_ORIGIN: "*"
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      RAZORPAY_CHECKOUT_NAME: ${RAZORPAY_CHECKOUT_NAME:-Atelier Objects}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -183,6 +192,7 @@ services:
 volumes:
   mongo_data:
   redis_data:
+  vendor_storage:
 
 networks:
   marketplace-network:

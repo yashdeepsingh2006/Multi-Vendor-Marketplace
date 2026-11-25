@@ -1,8 +1,8 @@
 import multer from "multer";
 import path from "path";
 
-// Files are buffered in memory and streamed to Amazon S3 by the controllers.
-// Nothing is written to the local filesystem.
+// Files are buffered in memory and written to S3 or local storage by the
+// controllers. Multer itself does not touch the filesystem.
 const storage = multer.memoryStorage();
 
 export const uploadKyc = multer({

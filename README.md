@@ -41,10 +41,11 @@ To stop all running backend containers:
 docker compose down
 ```
 
-## File storage (Amazon S3)
+## File storage (Amazon S3 or local disk)
 
-KYC documents and product images are stored in Amazon S3. Copy `.env.example`
-to `.env` and fill in the AWS placeholders before starting the stack:
+KYC documents and product images are stored in Amazon S3 when a bucket and
+explicit AWS credentials are configured. Copy `.env.example` to `.env` and fill
+in the AWS placeholders before starting the stack:
 
 ```env
 AWS_REGION=us-east-1
@@ -56,6 +57,36 @@ AWS_S3_BUCKET=
 The IAM user needs `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` on the
 bucket. The bucket stays private: product images are proxied through the API
 and KYC documents are downloaded with short-lived signed URLs.
+
+If `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, or `AWS_SECRET_ACCESS_KEY` is missing,
+the vendor service automatically falls back to local disk storage under
+`services/vendor-service/storage` (override with `LOCAL_STORAGE_DIR`). Local
+product images are served through the same API route, and KYC files use
+short-lived HMAC-signed links. In Docker Compose the local store is persisted in
+the `vendor_storage` volume. Use S3 for production or multi-instance
+deployments.
+
+## Payments (Razorpay)
+
+Checkout creates the marketplace order, then opens Razorpay Checkout for the
+authoritative order total. The order service verifies the Razorpay payment
+signature server-side and marks the order paid; the key secret never reaches
+the browser. Copy `.env.example` to `.env` and set:
+
+```env
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_CHECKOUT_NAME=Atelier Objects
+# Optional, required only for webhooks:
+# RAZORPAY_WEBHOOK_SECRET=
+```
+
+The Razorpay account must support the marketplace currency (`USD`). To receive
+asynchronous `payment.captured` and `payment.failed` events, configure the
+webhook URL `POST /payments/razorpay/webhook` in the Razorpay dashboard and set
+the same secret as `RAZORPAY_WEBHOOK_SECRET`. See the
+[order service API contract](docs/api/order-api.md) for payloads and status
+transitions.
 
 For container logs and persistence details, see [Infrastructure & Deployment](infrastructure/README.md).
 

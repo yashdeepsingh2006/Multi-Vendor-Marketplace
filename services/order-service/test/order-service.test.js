@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 process.env.JWT_SECRET = "test-secret-that-is-at-least-32-characters-long";
@@ -12,6 +13,11 @@ const {
     validateOrderId
 } = await import("../utils/order.validation.js");
 const { parsePagination } = await import("../utils/catalog.validation.js");
+const {
+    buildRazorpayOrderPayload,
+    verifyPaymentSignature,
+    verifyWebhookSignature
+} = await import("../utils/razorpay.js");
 
 const response = () => {
     const result = {};
@@ -116,4 +122,78 @@ test("order pagination validates page and pageSize bounds", () => {
     assert.deepEqual(parsePagination({ page: "2", pageSize: "10" }), { page: 2, pageSize: 10 });
     assert.throws(() => parsePagination({ page: "-1" }), /positive integer/);
     assert.throws(() => parsePagination({ pageSize: "100" }), /between 1 and 50/);
+});
+
+test("Razorpay order payload uses integer minor units and a bounded receipt", () => {
+    const payload = buildRazorpayOrderPayload({
+        amountMinor: 12999,
+        currency: "USD",
+        receipt: "  ORD-12345678-abcd-1234-ef01-123456789abc  ",
+        notes: { orderId: "ORD-12345678-abcd-1234-ef01-123456789abc", customerUserId: 42 }
+    });
+
+    assert.equal(payload.amount, 12999);
+    assert.equal(payload.currency, "USD");
+    assert.equal(payload.receipt, "ORD-12345678-abcd-1234-ef01-123456789abc");
+    assert.equal(payload.notes.customerUserId, "42");
+
+    assert.throws(() => buildRazorpayOrderPayload({
+        amountMinor: 0,
+        currency: "USD",
+        receipt: "ORD-1"
+    }), /positive integer/);
+    assert.throws(() => buildRazorpayOrderPayload({
+        amountMinor: 10.5,
+        currency: "USD",
+        receipt: "ORD-1"
+    }), /positive integer/);
+    assert.throws(() => buildRazorpayOrderPayload({
+        amountMinor: 100,
+        currency: "usd",
+        receipt: "ORD-1"
+    }), /3-letter ISO code/);
+    assert.throws(() => buildRazorpayOrderPayload({
+        amountMinor: 100,
+        currency: "USD",
+        receipt: "a".repeat(41)
+    }), /at most 40 characters/);
+});
+
+test("Razorpay payment signature verification accepts a valid HMAC and rejects tampering", () => {
+    const secret = "test_razorpay_secret";
+    const razorpayOrderId = "order_ABC123";
+    const razorpayPaymentId = "pay_XYZ789";
+    const razorpaySignature = crypto
+        .createHmac("sha256", secret)
+        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+        .digest("hex");
+
+    assert.equal(
+        verifyPaymentSignature({ razorpayOrderId, razorpayPaymentId, razorpaySignature }, secret),
+        true
+    );
+    assert.equal(
+        verifyPaymentSignature({ razorpayOrderId, razorpayPaymentId, razorpaySignature: "0".repeat(64) }, secret),
+        false
+    );
+    assert.equal(
+        verifyPaymentSignature({ razorpayOrderId, razorpayPaymentId: "pay_OTHER", razorpaySignature }, secret),
+        false
+    );
+    assert.equal(
+        verifyPaymentSignature({ razorpayOrderId, razorpayPaymentId, razorpaySignature }, ""),
+        false
+    );
+});
+
+test("Razorpay webhook signature verification uses the exact raw request body", () => {
+    const secret = "test_webhook_secret";
+    const rawBody = Buffer.from(JSON.stringify({ event: "payment.captured", payload: {} }), "utf8");
+    const signature = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+
+    assert.equal(verifyWebhookSignature(rawBody, signature, secret), true);
+    assert.equal(verifyWebhookSignature(rawBody.toString("utf8"), signature, secret), true);
+    assert.equal(verifyWebhookSignature(Buffer.from(`${rawBody.toString("utf8")} `), signature, secret), false);
+    assert.equal(verifyWebhookSignature(rawBody, "not-a-signature", secret), false);
+    assert.equal(verifyWebhookSignature(rawBody, signature, ""), false);
 });

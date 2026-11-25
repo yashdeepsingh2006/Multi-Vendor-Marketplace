@@ -8,6 +8,8 @@ import type {
   CustomerOrderListResult,
   CustomerProfile,
   DeliveryAddressSnapshot,
+  PaymentSessionResult,
+  PaymentVerificationPayload,
   SavedAddress,
 } from '../types/customer';
 
@@ -83,6 +85,8 @@ export const removeCustomerToken = (): void => {
 
 export interface RequestOptions extends RequestInit {
   requiresAuth?: boolean;
+  /** Retry against customer-service when order-service is unreachable. */
+  allowServiceFallback?: boolean;
 }
 
 export const customerRequest = async <T>(
@@ -90,7 +94,7 @@ export const customerRequest = async <T>(
   options: RequestOptions = {},
   serviceBaseUrl: string = CUSTOMER_SERVICE_URL
 ): Promise<T> => {
-  const { requiresAuth = false, headers, ...restOptions } = options;
+  const { requiresAuth = false, allowServiceFallback = true, headers, ...restOptions } = options;
   const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(headers as Record<string, string>),
@@ -114,7 +118,7 @@ export const customerRequest = async <T>(
     });
   } catch {
     // If order-service is down and this was an order request, fallback to customer-service
-    if (serviceBaseUrl === ORDER_SERVICE_URL && ORDER_SERVICE_URL !== CUSTOMER_SERVICE_URL) {
+    if (allowServiceFallback && serviceBaseUrl === ORDER_SERVICE_URL && ORDER_SERVICE_URL !== CUSTOMER_SERVICE_URL) {
       try {
         response = await fetch(`${CUSTOMER_SERVICE_URL}${cleanEndpoint}`, {
           ...restOptions,
@@ -365,5 +369,31 @@ export const cancelOrder = async (orderId: string): Promise<CustomerOrder> => {
   return customerRequest<CustomerOrder>(`/orders/${encodeURIComponent(orderId.trim())}/cancel`, {
     method: 'POST',
     requiresAuth: true,
+  }, ORDER_SERVICE_URL);
+};
+
+// ---------------- PAYMENTS ---------------- //
+
+export const createPaymentSession = async (orderId: string): Promise<PaymentSessionResult> => {
+  return customerRequest<PaymentSessionResult>(`/orders/${encodeURIComponent(orderId.trim())}/payment`, {
+    method: 'POST',
+    requiresAuth: true,
+    allowServiceFallback: false,
+  }, ORDER_SERVICE_URL);
+};
+
+export const verifyOrderPayment = async (
+  orderId: string,
+  payload: PaymentVerificationPayload
+): Promise<CustomerOrder> => {
+  return customerRequest<CustomerOrder>(`/orders/${encodeURIComponent(orderId.trim())}/payment/verify`, {
+    method: 'POST',
+    requiresAuth: true,
+    allowServiceFallback: false,
+    body: JSON.stringify({
+      razorpayOrderId: payload.razorpayOrderId,
+      razorpayPaymentId: payload.razorpayPaymentId,
+      razorpaySignature: payload.razorpaySignature,
+    }),
   }, ORDER_SERVICE_URL);
 };

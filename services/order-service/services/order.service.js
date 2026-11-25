@@ -222,6 +222,15 @@ const serializeOrder = (order) => ({
     currency: order.currency,
     status: order.status,
     paymentStatus: order.paymentStatus,
+    payment: {
+        provider: order.paymentProvider || null,
+        razorpayOrderId: order.razorpayOrderId || null,
+        razorpayPaymentId: order.razorpayPaymentId || null,
+        paidAmount: order.paidAmountMinor === null || order.paidAmountMinor === undefined
+            ? null
+            : fromMinorUnits(order.paidAmountMinor),
+        paidAt: order.paidAt || null
+    },
     deliveryAddress: order.deliveryAddress,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt

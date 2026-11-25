@@ -1,12 +1,28 @@
+import path from "path";
 import { getVendor, updateVendorProfile } from "../services/vendor-data.service.js";
 import { serializeVendorPublic, serializeVendorSelf } from "../utils/vendor.serialization.js";
 import {
-    deleteFileFromS3,
+    createLocalReadStream,
+    deleteFile,
     getDownloadUrl,
-    getS3Config,
+    getLocalFile,
+    getStorageConfig,
     isKycObjectKey,
-    uploadFilesToS3
-} from "../utils/s3.js";
+    isLocalStorage,
+    uploadFiles,
+    verifyDownloadRequest
+} from "../utils/storage.js";
+
+const firstHeaderValue = (value) => String(value || "").split(",")[0].trim();
+
+const getRequestBaseUrl = (req) => {
+    const forwardedProto = firstHeaderValue(req.headers?.["x-forwarded-proto"]);
+    const forwardedHost = firstHeaderValue(req.headers?.["x-forwarded-host"]);
+    const protocol = forwardedProto || req.protocol || "http";
+    const host = forwardedHost || req.get?.("host") || req.headers?.host;
+
+    return host ? `${protocol}://${host}` : "";
+};
 
 const vendorDataController = async (req, res) => {
     try {
@@ -85,7 +101,7 @@ const updateVendorController = async (req, res) => {
             kycDocs
         });
 
-        await Promise.all(removedKycKeys.map((key) => deleteFileFromS3(key)));
+        await Promise.all(removedKycKeys.map((key) => deleteFile(key)));
 
         return res.status(result.statusCode || 200).json(result);
     } catch (error) {
@@ -117,7 +133,7 @@ const uploadKycController = async (req, res) => {
             return res.status(404).json({ message: "Vendor profile not found" });
         }
 
-        const uploadedFiles = await uploadFilesToS3(files, {
+        const uploadedFiles = await uploadFiles(files, {
             prefix: `kyc/${userId}`,
             cacheControl: "private, max-age=0, no-store"
         });
@@ -175,8 +191,11 @@ const getKycDownloadUrlController = async (req, res) => {
             return res.status(404).json({ message: "KYC document not found for this vendor" });
         }
 
-        const url = await getDownloadUrl(key);
-        const { signedUrlTtl } = getS3Config();
+        const { signedUrlTtl } = getStorageConfig();
+        const url = await getDownloadUrl(key, {
+            baseUrl: getRequestBaseUrl(req),
+            expiresIn: signedUrlTtl
+        });
 
         return res.status(200).json({
             message: "KYC document URL generated successfully",
@@ -193,15 +212,58 @@ const getKycDownloadUrlController = async (req, res) => {
     }
 };
 
+// Serves locally stored KYC documents through a short-lived HMAC-signed link.
+// This route is public because browsers open the generated URL in a new tab
+// without the Authorization header; the signature and expiry protect the file.
+const getKycDocumentController = async (req, res) => {
+    try {
+        if (!isLocalStorage()) {
+            return res.status(404).json({ message: "KYC document is not available through this endpoint" });
+        }
+
+        const key = req.query?.key;
+        const expires = req.query?.expires;
+        const signature = req.query?.signature;
+
+        if (!isKycObjectKey(key)) {
+            return res.status(400).json({ message: "A valid KYC document key is required" });
+        }
+
+        if (!verifyDownloadRequest(key, expires, signature)) {
+            return res.status(403).json({ message: "KYC download link is invalid or has expired" });
+        }
+
+        const file = await getLocalFile(key);
+        const fileName = path.basename(file.path).replace(/["\\\r\n]/g, "");
+
+        res.setHeader("Content-Type", file.contentType);
+        res.setHeader("Content-Length", String(file.size));
+        res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+        res.setHeader("Cache-Control", "private, no-store");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+
+        const stream = createLocalReadStream(file.path);
+        stream.on("error", () => res.destroy());
+        return stream.pipe(res);
+    } catch (error) {
+        console.error("Error in getKycDocumentController:", error);
+        return res.status(error.statusCode || 500).json({
+            message: error.message || "Failed to open KYC document"
+        });
+    }
+};
+
 export {
     vendorDataController,
     updateVendorController,
     uploadKycController,
-    getKycDownloadUrlController
+    getKycDownloadUrlController,
+    getKycDocumentController
 };
 export default {
     vendorDataController,
     updateVendorController,
     uploadKycController,
-    getKycDownloadUrlController
+    getKycDownloadUrlController,
+    getKycDocumentController
 };

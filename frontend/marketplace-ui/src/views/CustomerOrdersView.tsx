@@ -4,9 +4,13 @@ import {
   listOrders,
   getOrder,
   cancelOrder,
+  createPaymentSession,
+  verifyOrderPayment,
   CustomerApiError,
 } from '../services/customerApi';
 import type { CustomerOrder, CustomerOrderSummary } from '../types/customer';
+import { loadRazorpayCheckout, openRazorpayCheckout } from '../utils/razorpayCheckout';
+import { takePaymentNotice } from '../utils/paymentNotice';
 import {
   SpinnerIcon,
   AtelierLogoGlyph,
@@ -39,6 +43,9 @@ export const CustomerOrdersView: React.FC<CustomerOrdersViewProps> = ({
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
   const fetchOrderList = useCallback(async (targetPage: number) => {
     if (!isCustomerAuthenticated) {
@@ -72,6 +79,8 @@ export const CustomerOrdersView: React.FC<CustomerOrdersViewProps> = ({
   const viewOrderDetail = useCallback(async (orderId: string) => {
     setIsLoadingDetail(true);
     setDetailError(null);
+    setPaymentError(null);
+    setPaymentNotice(takePaymentNotice(orderId));
     try {
       const data = await getOrder(orderId);
       setActiveOrder(data);
@@ -135,6 +144,8 @@ export const CustomerOrdersView: React.FC<CustomerOrdersViewProps> = ({
   useEffect(() => {
     if (!initialOrderId || !isCustomerAuthenticated) return;
     let isMounted = true;
+    setPaymentError(null);
+    setPaymentNotice(takePaymentNotice(initialOrderId));
     getOrder(initialOrderId)
       .then((data) => {
         if (isMounted) setActiveOrder(data);
@@ -177,6 +188,64 @@ export const CustomerOrdersView: React.FC<CustomerOrdersViewProps> = ({
       }
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handlePayNow = async () => {
+    if (!activeOrder || isPaying) return;
+
+    setIsPaying(true);
+    setPaymentError(null);
+    setPaymentNotice(null);
+
+    try {
+      const session = await createPaymentSession(activeOrder.orderId);
+
+      if (session.alreadyPaid || !session.payment) {
+        const refreshed = await getOrder(activeOrder.orderId);
+        setActiveOrder(refreshed);
+        void fetchOrderList(page);
+        return;
+      }
+
+      const scriptReady = await loadRazorpayCheckout();
+      if (!scriptReady) {
+        throw new Error('Secure Razorpay checkout could not be loaded. Check your connection and try again.');
+      }
+
+      const paymentResult = await openRazorpayCheckout({
+        key: session.payment.keyId,
+        amount: session.payment.amount,
+        currency: session.payment.currency,
+        name: session.payment.name,
+        description: session.payment.description,
+        order_id: session.payment.razorpayOrderId,
+        prefill: session.payment.prefill,
+        theme: { color: '#9c784e' },
+      });
+
+      if (!paymentResult) {
+        setPaymentNotice('Payment was cancelled. The order is still awaiting payment.');
+        return;
+      }
+
+      const updated = await verifyOrderPayment(activeOrder.orderId, {
+        razorpayOrderId: paymentResult.razorpay_order_id,
+        razorpayPaymentId: paymentResult.razorpay_payment_id,
+        razorpaySignature: paymentResult.razorpay_signature,
+      });
+
+      setActiveOrder(updated);
+      void fetchOrderList(page);
+    } catch (err) {
+      if (err instanceof CustomerApiError && (err.statusCode === 401 || err.statusCode === 403)) {
+        logoutCustomer();
+        onNavigateToAuth();
+        return;
+      }
+      setPaymentError(err instanceof Error ? err.message : 'Payment could not be completed.');
+    } finally {
+      setIsPaying(false);
     }
   };
 
@@ -428,6 +497,18 @@ export const CustomerOrdersView: React.FC<CustomerOrdersViewProps> = ({
                   </div>
                 </div>
 
+                {paymentNotice && activeOrder.paymentStatus !== 'paid' && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                    {paymentNotice}
+                  </div>
+                )}
+
+                {paymentError && (
+                  <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-700">
+                    {paymentError}
+                  </div>
+                )}
+
                 {/* Vendor Subgroups & Items */}
                 <div className="space-y-4">
                   <span className="text-[10px] font-bold tracking-[0.18em] uppercase text-neutral-500 block">
@@ -497,11 +578,16 @@ export const CustomerOrdersView: React.FC<CustomerOrdersViewProps> = ({
                       <span>Total:</span>
                       <span>${activeOrder.total.toFixed(2)} USD</span>
                     </div>
+                    {activeOrder.paymentStatus === 'paid' && activeOrder.payment?.paidAt && (
+                      <p className="text-[10px] text-emerald-700">
+                        Paid via Razorpay on {new Date(activeOrder.payment.paidAt).toLocaleString()}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                {/* Action Area: Cancel Order if permitted */}
-                <div className="pt-4 border-t border-neutral-200 flex items-center justify-between">
+                {/* Action Area: Pay or cancel while the order is still actionable */}
+                <div className="pt-4 border-t border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <button
                     type="button"
                     onClick={() => setActiveOrder(null)}
@@ -510,23 +596,45 @@ export const CustomerOrdersView: React.FC<CustomerOrdersViewProps> = ({
                     Close Dossier
                   </button>
 
-                  {activeOrder.status === 'pending' && activeOrder.paymentStatus === 'pending' && (
-                    <button
-                      type="button"
-                      disabled={isCancelling}
-                      onClick={() => handleCancelOrder(activeOrder.orderId)}
-                      className="px-5 py-2 bg-red-700 text-white text-xs font-semibold tracking-wider uppercase hover:bg-red-800 disabled:bg-neutral-400 cursor-pointer flex items-center gap-2"
-                    >
-                      {isCancelling ? (
-                        <>
-                          <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
-                          <span>RESTORING INVENTORY...</span>
-                        </>
-                      ) : (
-                        <span>CANCEL ORDER</span>
-                      )}
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-3">
+                    {activeOrder.status === 'pending'
+                      && activeOrder.paymentStatus !== 'paid'
+                      && activeOrder.paymentStatus !== 'refunded' && (
+                      <button
+                        type="button"
+                        disabled={isPaying || isCancelling}
+                        onClick={() => void handlePayNow()}
+                        className="px-5 py-2 bg-[#9c784e] text-white text-xs font-semibold tracking-wider uppercase hover:bg-[#86643f] disabled:bg-neutral-400 cursor-pointer flex items-center gap-2"
+                      >
+                        {isPaying ? (
+                          <>
+                            <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
+                            <span>OPENING SECURE PAYMENT...</span>
+                          </>
+                        ) : (
+                          <span>PAY NOW (${activeOrder.total.toFixed(2)} USD)</span>
+                        )}
+                      </button>
+                    )}
+
+                    {activeOrder.status === 'pending' && activeOrder.paymentStatus === 'pending' && (
+                      <button
+                        type="button"
+                        disabled={isCancelling || isPaying}
+                        onClick={() => handleCancelOrder(activeOrder.orderId)}
+                        className="px-5 py-2 bg-red-700 text-white text-xs font-semibold tracking-wider uppercase hover:bg-red-800 disabled:bg-neutral-400 cursor-pointer flex items-center gap-2"
+                      >
+                        {isCancelling ? (
+                          <>
+                            <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
+                            <span>RESTORING INVENTORY...</span>
+                          </>
+                        ) : (
+                          <span>CANCEL ORDER</span>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : null}

@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 
@@ -240,4 +243,96 @@ test("S3 object keys are namespaced, sanitized, and served through the image pro
     assert.equal(isProductImageObjectKey(key), true);
     assert.equal(isKycObjectKey(key), false);
     assert.equal(getProductImageUrl(key), `/products/images?key=${encodeURIComponent(key)}`);
+});
+
+test("storage falls back to local files when S3 credentials are missing", async () => {
+    const envNames = [
+        "AWS_S3_BUCKET",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "LOCAL_STORAGE_DIR",
+        "LOCAL_STORAGE_SECRET"
+    ];
+    const previousEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
+    const restoreEnv = () => {
+        for (const name of envNames) {
+            if (previousEnv[name] === undefined) {
+                delete process.env[name];
+            } else {
+                process.env[name] = previousEnv[name];
+            }
+        }
+    };
+
+    const storageDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "marketplace-storage-"));
+    delete process.env.AWS_S3_BUCKET;
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
+    process.env.LOCAL_STORAGE_DIR = storageDirectory;
+    process.env.LOCAL_STORAGE_SECRET = "local-storage-test-secret";
+
+    try {
+        const storage = await import("../utils/storage.js");
+
+        assert.equal(storage.isS3Configured(), false);
+        assert.equal(storage.isLocalStorage(), true);
+        assert.equal(storage.getStorageDriver(), "local");
+
+        const [image] = await storage.uploadFiles([{
+            originalname: "Vase.png",
+            mimetype: "image/png",
+            buffer: Buffer.from("product-image-bytes")
+        }], { prefix: "products/1001" });
+
+        const [document] = await storage.uploadFiles([{
+            originalname: "passport.pdf",
+            mimetype: "application/pdf",
+            buffer: Buffer.from("kyc-document-bytes")
+        }], { prefix: "kyc/1001" });
+
+        assert.match(image.key, /^products\/1001\/\d{4}-\d{2}-\d{2}\/[0-9a-f-]{36}-Vase\.png$/);
+        assert.match(document.key, /^kyc\/1001\/\d{4}-\d{2}-\d{2}\/[0-9a-f-]{36}-passport\.pdf$/);
+        assert.equal(
+            storage.getProductImageUrl(image.key),
+            `/products/images?key=${encodeURIComponent(image.key)}`
+        );
+
+        const imageFile = await storage.getLocalFile(image.key);
+        assert.equal(imageFile.contentType, "image/png");
+        assert.equal((await fs.readFile(imageFile.path)).toString("utf8"), "product-image-bytes");
+
+        const documentFile = await storage.getLocalFile(document.key);
+        assert.equal(documentFile.contentType, "application/pdf");
+
+        const downloadUrl = await storage.getDownloadUrl(document.key, {
+            baseUrl: "http://localhost:8000",
+            expiresIn: 300
+        });
+        const parsedUrl = new URL(downloadUrl);
+        assert.equal(parsedUrl.origin, "http://localhost:8000");
+        assert.equal(parsedUrl.pathname, "/vendor-data/kyc-file");
+        assert.equal(parsedUrl.searchParams.get("key"), document.key);
+
+        const expires = parsedUrl.searchParams.get("expires");
+        const signature = parsedUrl.searchParams.get("signature");
+        assert.equal(storage.verifyDownloadRequest(document.key, expires, signature), true);
+        assert.equal(storage.verifyDownloadRequest(document.key, expires, "0".repeat(64)), false);
+        assert.equal(storage.verifyDownloadRequest(image.key, expires, signature), false);
+        assert.equal(
+            storage.verifyDownloadRequest(document.key, String(Math.floor(Date.now() / 1000) - 10), signature),
+            false
+        );
+
+        assert.equal(await storage.deleteFile(document.key), true);
+        await assert.rejects(() => storage.getLocalFile(document.key), /not found/i);
+
+        process.env.AWS_S3_BUCKET = "test-bucket";
+        process.env.AWS_ACCESS_KEY_ID = "test-access-key";
+        process.env.AWS_SECRET_ACCESS_KEY = "test-secret-key";
+        assert.equal(storage.isS3Configured(), true);
+        assert.equal(storage.getStorageDriver(), "s3");
+    } finally {
+        restoreEnv();
+        await fs.rm(storageDirectory, { recursive: true, force: true });
+    }
 });
