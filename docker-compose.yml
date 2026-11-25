@@ -91,8 +91,15 @@ services:
       JWT_EXPIRES_IN: 7d
       ADMIN_EMAILS: ${ADMIN_EMAILS:-yashdeepsingh110200@gmail.com}
       CORS_ORIGIN: "*"
-    volumes:
-      - vendor_uploads:/app/uploads
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_S3_PUBLIC_BASE_URL: ${AWS_S3_PUBLIC_BASE_URL:-}
+      AWS_S3_SIGNED_URL_TTL: ${AWS_S3_SIGNED_URL_TTL:-900}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-}
+      AWS_S3_FORCE_PATH_STYLE: ${AWS_S3_FORCE_PATH_STYLE:-false}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -176,7 +183,6 @@ services:
 volumes:
   mongo_data:
   redis_data:
-  vendor_uploads:
 
 networks:
   marketplace-network:

@@ -6,8 +6,8 @@ The OTP service is an internal dependency and is not called directly by the
 customer frontend.
 
 In development, CORS defaults to open access for local testing. Production
-deployments must set `CORS_ORIGIN` to the frontend origin; the service does not
-serve uploaded KYC files as public static content.
+deployments must set `CORS_ORIGIN` to the frontend origin. KYC documents are
+stored privately in Amazon S3 and are never served as public static content.
 
 ## Authentication
 

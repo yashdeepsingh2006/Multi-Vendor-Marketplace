@@ -621,9 +621,10 @@ test('9. Product Image Upload & Resolution Contract', async (t) => {
     assert.equal(resolveProductImageUrl(''), '');
   });
 
-  await t.test('resolveProductImageUrl resolves local /uploads paths', () => {
-    const resolved = resolveProductImageUrl('/uploads/products/lamp.jpg');
-    assert.ok(resolved.endsWith('/uploads/products/lamp.jpg'));
+  await t.test('resolveProductImageUrl resolves product image proxy paths', () => {
+    const proxyPath = '/products/images?key=products%2F1001%2F2026-11-25%2Flamp.jpg';
+    const resolved = resolveProductImageUrl(proxyPath);
+    assert.ok(resolved.endsWith(proxyPath));
     assert.ok(resolved.startsWith('http'));
   });
 
@@ -639,6 +640,7 @@ test('9. Product Image Upload & Resolution Contract', async (t) => {
     storage.set('vendor_token', 'valid-vendor-token');
     let requestMethod = '';
     let hasAuth = false;
+    const uploadedImagePath = '/products/images?key=products%2F1001%2F2026-11-25%2Fprod-vase-123.jpg';
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (url, init) => {
       requestMethod = init.method;
@@ -647,7 +649,7 @@ test('9. Product Image Upload & Resolution Contract', async (t) => {
         JSON.stringify({
           message: 'Product image(s) uploaded successfully',
           data: {
-            images: ['/uploads/products/prod-vase-123.jpg'],
+            images: [uploadedImagePath],
           },
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -660,7 +662,7 @@ test('9. Product Image Upload & Resolution Contract', async (t) => {
       const urls = await uploadProductImages([dummyFile]);
       assert.equal(requestMethod, 'POST');
       assert.equal(hasAuth, true);
-      assert.deepEqual(urls, ['/uploads/products/prod-vase-123.jpg']);
+      assert.deepEqual(urls, [uploadedImagePath]);
     } finally {
       globalThis.fetch = originalFetch;
       storage.delete('vendor_token');

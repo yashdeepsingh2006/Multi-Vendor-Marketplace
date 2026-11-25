@@ -1,7 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import path from "path";
 
 dotenv.config();
 
@@ -23,9 +22,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
-
-// Serve uploaded product images & KYC docs statically if accessed via customer-service
-app.use("/uploads", express.static(path.resolve("../vendor-service/uploads")));
 
 app.get("/health", (req, res) => {
     res.json({ message: "ok", service: "customer-service" });

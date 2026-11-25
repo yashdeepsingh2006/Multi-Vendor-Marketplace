@@ -2,7 +2,8 @@ import { Router } from "express";
 import {
     vendorDataController,
     updateVendorController,
-    uploadKycController
+    uploadKycController,
+    getKycDownloadUrlController
 } from "../controllers/vendor-data.controller.js";
 import {
     getVendorOrdersController,
@@ -26,6 +27,9 @@ router.patch("/orders/:orderId/status", updateVendorOrderStatusController);
 
 // Upload KYC document(s) for the authenticated vendor
 router.post("/upload-kyc", uploadKyc.any(), uploadKycController);
+
+// Generate a short-lived signed download URL for a private KYC document
+router.get("/kyc-url", getKycDownloadUrlController);
 
 // Target specific userId: admin can access all, vendors access their own
 router.get("/:userId", authorizeVendorOwnerOrAdmin, vendorDataController);

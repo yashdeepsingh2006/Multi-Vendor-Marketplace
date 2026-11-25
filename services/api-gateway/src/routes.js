@@ -31,7 +31,6 @@ router.get("/", (req, res) => {
             { path: "/vendor-data/*", target: "Vendor Service (:3001)", description: "Vendor profile & KYC verification" },
             { path: "/products/*", target: "Vendor Service (:3001)", description: "Vendor product catalog management" },
             { path: "/admin/*", target: "Vendor Service (:3001)", description: "Platform admin governance and approvals" },
-            { path: "/uploads/*", target: "Vendor Service (:3001)", description: "Static media and product images" },
             { path: "/otp/*", target: "OTP Service (:3000)", description: "Direct OTP generation & verification" },
             { path: "/api/*", target: "Dynamic", description: "Prefix alias for all above routes" }
         ]
@@ -68,7 +67,6 @@ router.use(["/register", "/api/register"], vendorProxy);
 router.use(["/vendor-data", "/api/vendor-data"], vendorProxy);
 router.use(["/products", "/api/products"], vendorProxy);
 router.use(["/admin", "/api/admin"], vendorProxy);
-router.use(["/uploads", "/api/uploads"], vendorProxy);
 
 // 6. OTP Service routes
 router.use(["/otp", "/api/otp"], otpProxy);

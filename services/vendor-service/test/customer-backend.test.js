@@ -217,24 +217,27 @@ test("vendor order status update validates status and orderId", async () => {
     );
 });
 
-test("product images upload controller handles file uploads and missing file errors", async () => {
+test("product image upload controller handles missing file errors", async () => {
     const { uploadProductImagesController } = await import("../controllers/product.controller.js");
 
     const errorRes = response();
     await uploadProductImagesController({ files: [] }, errorRes);
     assert.equal(errorRes.result.status, 400);
     assert.match(errorRes.result.body.message, /No image file was uploaded/);
+});
 
-    const successRes = response();
-    await uploadProductImagesController({
-        files: [
-            { filename: "prod-vase-1.png" },
-            { filename: "prod-vase-2.webp" }
-        ]
-    }, successRes);
-    assert.equal(successRes.result.status, 200);
-    assert.deepEqual(successRes.result.body.data.images, [
-        "/uploads/products/prod-vase-1.png",
-        "/uploads/products/prod-vase-2.webp"
-    ]);
+test("S3 object keys are namespaced, sanitized, and served through the image proxy", async () => {
+    delete process.env.AWS_S3_PUBLIC_BASE_URL;
+    const {
+        buildObjectKey,
+        getProductImageUrl,
+        isKycObjectKey,
+        isProductImageObjectKey
+    } = await import("../utils/s3.js");
+
+    const key = buildObjectKey("products/1001", "My Vase!.PNG");
+    assert.match(key, /^products\/1001\/\d{4}-\d{2}-\d{2}\/[0-9a-f-]{36}-My_Vase\.png$/);
+    assert.equal(isProductImageObjectKey(key), true);
+    assert.equal(isKycObjectKey(key), false);
+    assert.equal(getProductImageUrl(key), `/products/images?key=${encodeURIComponent(key)}`);
 });

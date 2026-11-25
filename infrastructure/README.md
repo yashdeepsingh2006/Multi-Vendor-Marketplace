@@ -38,7 +38,39 @@ npm run dev
 
 - `mongo_data`: Stores MongoDB database data (`/data/db`).
 - `redis_data`: Stores Redis cache data (`/data`).
-- `vendor_uploads`: Persists uploaded KYC documents and product images (`/app/uploads`).
+
+### Object Storage (Amazon S3)
+
+Product images and KYC documents are uploaded to Amazon S3 by the vendor
+service; no uploads are persisted in a Docker volume. Configure the bucket in
+the root `.env` file used by Compose:
+
+```env
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_BUCKET=
+```
+
+The bucket can remain private. Product images are served through the vendor
+service with short-lived signed redirects, and KYC documents are downloaded
+through authenticated signed URLs. Set `AWS_S3_PUBLIC_BASE_URL` only when a
+public CDN/custom domain is configured in front of the bucket.
+
+The IAM principal only needs access to the bucket objects:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/*"
+    }
+  ]
+}
+```
 
 ### Management Commands
 

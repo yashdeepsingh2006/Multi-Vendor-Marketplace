@@ -15,7 +15,7 @@
 `services/api-gateway` is an Express reverse proxy running on port 8000.
 It acts as the single entry point for all frontend and external API traffic:
 - Bundles downstream microservices behind unified `/api/*` and resource paths.
-- Provides streaming request forwarding for file uploads (KYC docs, product images).
+- Provides streaming request forwarding for file uploads (KYC docs, product images) which are persisted in Amazon S3.
 - Performs aggregated health checks (`/health`) across all 4 downstream services.
 - Manages CORS and injects `x-request-id` tracking headers.
 
@@ -52,7 +52,7 @@ It owns:
 - vendor registration (`/register`)
 - vendor profile and KYC upload metadata (`/vendor-data`)
 - vendor approval and rejection (`/admin`)
-- vendor product CRUD and image uploads (`/products`)
+- vendor product CRUD and image uploads stored in Amazon S3 (`/products`)
 - vendor & admin JWT authentication
 
 It calls the OTP service over HTTP (`:3000`) for vendor OTP verification.
@@ -85,6 +85,9 @@ It calls the OTP service over HTTP (`:3000`) for vendor OTP verification.
              │             │                       │
              │             ├── Redis               ├── Redis
              │             └── SMTP                └── SMTP
-             ▼                                     ▼         ▼
+             ▼
+          Amazon S3 (product images, KYC documents)
+             │
+             ▼
           Shared MongoDB (Users, Vendors, Products, Carts, SavedAddresses, Orders)
 ```

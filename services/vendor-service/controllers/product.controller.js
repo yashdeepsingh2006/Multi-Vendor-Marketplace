@@ -4,6 +4,14 @@ import {
     updateProduct,
     deleteProduct
 } from "../services/product.service.js";
+import {
+    getDownloadUrl,
+    getProductImageUrl,
+    getPublicObjectUrl,
+    getS3Config,
+    isProductImageObjectKey,
+    uploadFilesToS3
+} from "../utils/s3.js";
 
 const editableProductFields = new Set([
     "title",
@@ -201,18 +209,44 @@ const uploadProductImagesController = async (req, res) => {
             return res.status(400).json({ message: "No image file was uploaded" });
         }
 
-        const uploadedUrls = files.map((f) => `/uploads/products/${f.filename}`);
+        const uploadedFiles = await uploadFilesToS3(files, {
+            prefix: `products/${req.user?.userId ?? "unassigned"}`,
+            cacheControl: "public, max-age=31536000, immutable"
+        });
 
         return res.status(200).json({
             message: "Product image(s) uploaded successfully",
             data: {
-                images: uploadedUrls
+                images: uploadedFiles.map((file) => getProductImageUrl(file.key))
             }
         });
     } catch (error) {
         console.error("Error in uploadProductImagesController:", error);
-        return res.status(500).json({
+        return res.status(error.statusCode || 500).json({
             message: error.message || "Failed to upload product images"
+        });
+    }
+};
+
+const getProductImageController = async (req, res) => {
+    try {
+        const key = req.query?.key;
+
+        if (!isProductImageObjectKey(key)) {
+            return res.status(400).json({ message: "A valid product image key is required" });
+        }
+
+        const { publicBaseUrl, signedUrlTtl } = getS3Config();
+        const redirectUrl = publicBaseUrl
+            ? getPublicObjectUrl(key)
+            : await getDownloadUrl(key);
+
+        res.setHeader("Cache-Control", `public, max-age=${Math.max(0, signedUrlTtl - 60)}`);
+        return res.redirect(302, redirectUrl);
+    } catch (error) {
+        console.error("Error in getProductImageController:", error);
+        return res.status(error.statusCode || 500).json({
+            message: error.message || "Failed to resolve product image"
         });
     }
 };
@@ -222,12 +256,14 @@ export {
     createProductController,
     updateProductController,
     deleteProductController,
-    uploadProductImagesController
+    uploadProductImagesController,
+    getProductImageController
 };
 export default {
     getMyProductsController,
     createProductController,
     updateProductController,
     deleteProductController,
-    uploadProductImagesController
+    uploadProductImagesController,
+    getProductImageController
 };

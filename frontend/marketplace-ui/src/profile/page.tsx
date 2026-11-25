@@ -205,6 +205,57 @@ export const ProfilePage: React.FC<ProfileProps> = ({
     }
   };
 
+  const handleOpenKycDoc = async (docPath: string) => {
+    setErrorMsg(null);
+
+    const directUrl = docPath.startsWith('http://') || docPath.startsWith('https://')
+      ? docPath
+      : docPath.startsWith('/')
+        ? `${VENDOR_SERVICE_URL}${docPath}`
+        : null;
+
+    // Legacy/local documents remain directly accessible.
+    if (directUrl) {
+      window.open(directUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const token = getAuthToken();
+    if (!token) {
+      setErrorMsg('Client session key not found. Please log in first.');
+      return;
+    }
+
+    // Open the tab synchronously so browsers do not block it after the await.
+    const popup = window.open('', '_blank');
+    if (popup) popup.opener = null;
+
+    try {
+      const res = await fetch(
+        `${VENDOR_SERVICE_URL}/vendor-data/kyc-url?key=${encodeURIComponent(docPath)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        data?: { url?: string };
+      };
+
+      if (!res.ok || !data.data?.url) {
+        throw new Error(data.message || 'Failed to open document');
+      }
+
+      if (popup && !popup.closed) {
+        popup.location.href = data.data.url;
+      } else {
+        window.open(data.data.url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err: unknown) {
+      if (popup && !popup.closed) popup.close();
+      const msg = err instanceof Error ? err.message : 'Failed to open document';
+      setErrorMsg(msg);
+    }
+  };
+
   const handleRemoveKycDoc = async (docToRemove: string) => {
     const updatedDocs = kycDocs.filter((d) => d !== docToRemove);
     setKycDocs(updatedDocs);
@@ -562,9 +613,6 @@ export const ProfilePage: React.FC<ProfileProps> = ({
                   <ul className="space-y-2">
                     {kycDocs.map((docPath, index) => {
                       const fileName = docPath.split('/').pop() || docPath;
-                      const docUrl = docPath.startsWith('http')
-                        ? docPath
-                        : `${VENDOR_SERVICE_URL}${docPath.startsWith('/') ? '' : '/'}${docPath}`;
 
                       return (
                         <li
@@ -573,15 +621,15 @@ export const ProfilePage: React.FC<ProfileProps> = ({
                         >
                           <div className="flex items-center gap-2.5 truncate">
                             <DocumentIcon className="w-4 h-4 text-[#9c784e] shrink-0" />
-                            <a
-                              href={docUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="truncate font-medium text-neutral-900 hover:underline flex items-center gap-1"
+                            <button
+                              type="button"
+                              onClick={() => void handleOpenKycDoc(docPath)}
+                              className="truncate font-medium text-neutral-900 hover:underline flex items-center gap-1 text-left cursor-pointer"
+                              title="Open document"
                             >
                               <span>{fileName}</span>
                               <ExternalLinkIcon className="text-neutral-400 shrink-0" />
-                            </a>
+                            </button>
                           </div>
 
                           <button

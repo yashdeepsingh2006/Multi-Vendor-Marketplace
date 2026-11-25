@@ -54,12 +54,15 @@ sequenceDiagram
 | `/auth/me` | `GET` | `vendor`, `admin` | Returns the authenticated user's profile and vendor data |
 | `/register` | `POST` | `vendor`, `admin` | Registers vendor store with optional hashed password |
 | `/vendor-data/profile` | `GET`, `PUT` | `vendor`, `admin` | Retrieves or updates the authenticated vendor's profile |
-| `/vendor-data/upload-kyc` | `POST` | `vendor`, `admin` | Uploads KYC document files via Multer (PDF, PNG, JPG, WebP) |
+| `/vendor-data/upload-kyc` | `POST` | `vendor`, `admin` | Uploads KYC document files to private Amazon S3 storage (PDF, PNG, JPG, WebP) |
+| `/vendor-data/kyc-url` | `GET` | `vendor`, `admin` | Generates a short-lived signed download URL for an owned KYC document |
 | `/vendor-data/:userId` | `GET`, `PUT` | `admin`, or owning `vendor` | Vendor can only access/edit their own data; Admin can access any |
 | `/admin/pending` | `GET` | `admin` | Lists all pending vendor approval requests |
 | `/admin/approve` | `POST` | `admin` | Approves a vendor application |
 | `/admin/reject` | `POST` | `admin` | Rejects a vendor application |
 | `/products` | `POST` | Approved `vendor` | Creates a product for the authenticated vendor |
+| `/products/upload-images` | `POST` | Approved `vendor` | Uploads product images to Amazon S3 and returns their durable URLs |
+| `/products/images` | `GET` | Public | Resolves a product image key to a short-lived signed S3 URL |
 | `/products/my` | `GET` | `vendor` | Lists products belonging to the authenticated vendor |
 | `/products/:productId` | `PATCH` | `vendor` | Updates an owned product |
 | `/products/:productId` | `DELETE` | `vendor` | Deletes an owned product |
@@ -88,12 +91,44 @@ OTP_SERVICE_URL=http://localhost:3000
 JWT_SECRET=replace-with-a-random-secret-at-least-32-characters
 JWT_EXPIRES_IN=7d
 ADMIN_EMAILS=admin@market.com,admin@example.com
+
+# Amazon S3 file storage
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_BUCKET=
+AWS_S3_PUBLIC_BASE_URL=
+AWS_S3_SIGNED_URL_TTL=900
 ```
 
 - **`OTP_SERVICE_URL`**: Base URL of the running OTP microservice (default: `http://localhost:3000`).
 - **`ADMIN_EMAILS`**: Comma-separated list of emails that are automatically granted the `admin` role upon OTP verification. All other emails default to `vendor`.
 - **`JWT_SECRET`**: Required secret of at least 32 characters. The service refuses to start when it is missing or too weak.
 - **`PORT`**: Set to `3001` so it does not collide with the OTP microservice on port `3000`.
+- **`AWS_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_S3_BUCKET`**: Amazon S3 credentials and target bucket. The IAM principal needs `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` for the bucket.
+- **`AWS_S3_PUBLIC_BASE_URL`**: Optional CDN/custom-domain base URL for product images. Leave empty to serve images through `/products/images` from the private bucket.
+- **`AWS_S3_SIGNED_URL_TTL`**: Lifetime in seconds of signed download URLs (default `900`, maximum `604800`).
+
+### File storage
+
+Uploads are processed in memory by Multer and streamed directly to Amazon S3;
+nothing is written to the local filesystem. Object layout:
+
+```text
+s3://<bucket>/products/<vendorUserId>/<date>/<uuid>-<filename>
+s3://<bucket>/kyc/<vendorUserId>/<date>/<uuid>-<filename>
+```
+
+The bucket does **not** need to be public. Product images resolve through
+`GET /products/images?key=...`, which redirects to a short-lived signed URL
+(unless `AWS_S3_PUBLIC_BASE_URL` points at a CDN). KYC documents stay private
+and are only retrievable through `/vendor-data/kyc-url`, which verifies the
+caller owns the document. Deleting a KYC document from the profile also
+removes the object from S3.
+
+> Existing files from the previous local `uploads/` directory are not migrated
+> automatically. Re-upload them through the product and KYC screens after
+> switching the bucket on.
 
 ---
 

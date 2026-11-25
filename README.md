@@ -41,6 +41,22 @@ To stop all running backend containers:
 docker compose down
 ```
 
+## File storage (Amazon S3)
+
+KYC documents and product images are stored in Amazon S3. Copy `.env.example`
+to `.env` and fill in the AWS placeholders before starting the stack:
+
+```env
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_BUCKET=
+```
+
+The IAM user needs `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` on the
+bucket. The bucket stays private: product images are proxied through the API
+and KYC documents are downloaded with short-lived signed URLs.
+
 For container logs and persistence details, see [Infrastructure & Deployment](infrastructure/README.md).
 
 ## Local development (All Services Without Docker)

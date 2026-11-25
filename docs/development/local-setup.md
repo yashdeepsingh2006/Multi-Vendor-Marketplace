@@ -35,6 +35,8 @@ See [infrastructure/README.md](../../infrastructure/README.md) for volume persis
 - MongoDB
 - Redis
 - SMTP credentials for sending OTP email
+- An Amazon S3 bucket and IAM credentials with `PutObject`, `GetObject`, and
+  `DeleteObject` permissions
 
 ## Start the OTP service
 
@@ -55,7 +57,10 @@ npm run dev
 ```
 
 The vendor service uses `services\vendor-service\.env` (default port `3001`). Its
-`OTP_SERVICE_URL` should point to `http://localhost:3000`.
+`OTP_SERVICE_URL` should point to `http://localhost:3000`. Uploaded product
+images and KYC documents are stored in Amazon S3; set `AWS_REGION`,
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_S3_BUCKET` in that file
+(or copy `services\vendor-service\.env.example`).
 
 ## Start the customer service
 

@@ -4,12 +4,17 @@ import {
     createProductController,
     updateProductController,
     deleteProductController,
-    uploadProductImagesController
+    uploadProductImagesController,
+    getProductImageController
 } from "../controllers/product.controller.js";
 import { authenticate, authorizeRoles } from "../middlewares/auth.js";
 import { uploadProductImages } from "../middlewares/upload.js";
 
 const router = Router();
+
+// Public product image resolver. Private S3 objects are served via short-lived
+// signed redirects so the bucket never has to be publicly readable.
+router.get("/images", getProductImageController);
 
 router.use(authenticate, authorizeRoles("vendor"));
 

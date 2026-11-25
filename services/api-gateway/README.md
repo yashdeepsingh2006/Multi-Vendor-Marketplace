@@ -31,7 +31,6 @@ Unified API Gateway and reverse-proxy for the Multi-Vendor Marketplace. It bundl
 | `/vendor-data/*` | `vendor-service` (:3001) | Vendor profile & KYC upload |
 | `/products/*` | `vendor-service` (:3001) | Vendor product management & image uploads |
 | `/admin/*` | `vendor-service` (:3001) | Platform admin audit & approvals |
-| `/uploads/*` | `vendor-service` (:3001) | Static media (product images and KYC assets) |
 | `/otp/*` | `otp-service` (:3000) | Direct OTP generation & verification |
 | `/api/*` | Dynamic | Transparent prefix alias for all the above |
 
